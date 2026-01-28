@@ -1,5 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:http/http.dart' as http;
+import 'dart:convert';
 import 'home_screen.dart';
+import 'main.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -9,157 +12,179 @@ class LoginScreen extends StatefulWidget {
 }
 
 class _LoginScreenState extends State<LoginScreen> {
-  final _emailController = TextEditingController(text: 'demo@acosenar.coop');
-  final _passwordController = TextEditingController(text: 'demo123');
+  final _emailController = TextEditingController();
+  final _passwordController = TextEditingController();
   bool _isLoading = false;
+  late VoidCallback _themeListener;
+
+  @override
+  void initState() {
+    super.initState();
+    _themeListener = () {
+      if (mounted) setState(() {}); // Rebuild when theme changes
+    };
+    ThemeController.mode.addListener(_themeListener);
+  }
+
+  @override
+  void dispose() {
+    ThemeController.mode.removeListener(_themeListener);
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
     return Scaffold(
-      body: Container(
-        decoration: const BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topCenter,
-            end: Alignment.bottomCenter,
-            colors: [Color(0xFF0066CC), Color(0xFF004488)],
-          ),
-        ),
-        child: Center(
-          child: SingleChildScrollView(
-            padding: const EdgeInsets.all(30),
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                // Logo
-                Container(
-                  width: 120,
-                  height: 120,
+      body: SafeArea(
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  const SizedBox(width: 40),
+                  Container(
+                    height: 128,
+                    child: Center(
+                      child: Text(
+                        'FINT',
+                        style: TextStyle(
+                          fontSize: 96,
+                          fontWeight: FontWeight.bold,
+                          color: isDark ? Colors.white : Colors.black,
+                          letterSpacing: 4,
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 40),
+                ],
+              ),
+              const SizedBox(height: 16),
+              Center(
+                child: Container(
+                  width: 96,
+                  height: 96,
                   decoration: BoxDecoration(
-                    color: Colors.white,
-                    borderRadius: BorderRadius.circular(30),
+                    color: theme.colorScheme.primary.withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(28),
                   ),
-                  child: const Icon(
-                    Icons.sailing,
-                    size: 60,
-                    color: Color(0xFF0066CC),
-                  ),
-                ),
-                const SizedBox(height: 30),
-                
-                // Título
-                const Text(
-                  'ACOSENAR',
-                  style: TextStyle(
-                    fontSize: 36,
-                    fontWeight: FontWeight.bold,
-                    color: Colors.white,
+                  child: Icon(
+                    Icons.sailing_outlined,
+                    size: 46,
+                    color: theme.colorScheme.primary,
                   ),
                 ),
-                const SizedBox(height: 10),
-                const Text(
-                  'Sistema de Gestión Financiera',
-                  style: TextStyle(
-                    fontSize: 16,
-                    color: Colors.white70,
+              ),
+              const SizedBox(height: 20),
+              Center(
+                child: Text(
+                  'Gestiona tu presupuesto con calma',
+                  style: theme.textTheme.bodyMedium?.copyWith(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w300,
+                    color: theme.colorScheme.onSurface.withOpacity(0.7),
                   ),
                 ),
-                const SizedBox(height: 40),
-                
-                // Card del formulario
-                Card(
-                  elevation: 10,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(20),
+              ),
+              const SizedBox(height: 24),
+              Card(
+                elevation: 0,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(22),
+                ),
+                child: Container(
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(22),
+                    boxShadow: [
+                      BoxShadow(
+                        color: theme.colorScheme.primary.withOpacity(0.08),
+                        blurRadius: 20,
+                        offset: const Offset(0, 10),
+                      ),
+                    ],
                   ),
                   child: Padding(
-                    padding: const EdgeInsets.all(25),
+                    padding: const EdgeInsets.all(24),
                     child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
-                        const Text(
-                          'Iniciar Sesión',
-                          style: TextStyle(
-                            fontSize: 24,
-                            fontWeight: FontWeight.bold,
+                        Text(
+                          'Iniciar sesión',
+                          style: theme.textTheme.titleLarge?.copyWith(
+                            fontSize: 22,
+                            fontWeight: FontWeight.w500,
                           ),
                         ),
-                        const SizedBox(height: 20),
-                        
-                        // Campo Email
+                        const SizedBox(height: 8),
+                        Text(
+                          'Accede con tu cuenta',
+                          style: theme.textTheme.bodyMedium?.copyWith(
+                            fontWeight: FontWeight.w300,
+                            color: theme.colorScheme.onSurface.withOpacity(0.6),
+                          ),
+                        ),
+                        const SizedBox(height: 24),
                         TextField(
                           controller: _emailController,
-                          decoration: InputDecoration(
-                            labelText: 'Email',
-                            prefixIcon: const Icon(Icons.email),
-                            border: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(10),
-                            ),
+                          decoration: const InputDecoration(
+                            labelText: 'Correo',
+                            prefixIcon: Icon(Icons.alternate_email),
                           ),
                         ),
-                        const SizedBox(height: 20),
-                        
-                        // Campo Contraseña
+                        const SizedBox(height: 16),
                         TextField(
                           controller: _passwordController,
                           obscureText: true,
-                          decoration: InputDecoration(
+                          decoration: const InputDecoration(
                             labelText: 'Contraseña',
-                            prefixIcon: const Icon(Icons.lock),
-                            border: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(10),
+                            prefixIcon: Icon(Icons.lock_outline),
+                          ),
+                        ),
+                        const SizedBox(height: 24),
+                        _isLoading
+                            ? const Center(child: CircularProgressIndicator())
+                            : SizedBox(
+                                height: 52,
+                                child: ElevatedButton.icon(
+                                  onPressed: _login,
+                                  style: ElevatedButton.styleFrom(
+                                    shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(14),
+                                    ),
+                                  ),
+                                  icon: const Icon(Icons.arrow_forward_rounded),
+                                  label: const Text('Entrar'),
+                                ),
+                              ),
+                        const SizedBox(height: 12),
+                        TextButton(
+                          onPressed: () {
+                            _emailController.clear();
+                            _passwordController.clear();
+                          },
+                          child: Text(
+                            'Limpiar campos',
+                            style: TextStyle(
+                              fontWeight: FontWeight.w300,
+                              color: theme.colorScheme.primary,
                             ),
                           ),
                         ),
-                        const SizedBox(height: 30),
-                        
-                        // Botón Login
-                        _isLoading
-                            ? const CircularProgressIndicator()
-                            : SizedBox(
-                                width: double.infinity,
-                                height: 50,
-                                child: ElevatedButton(
-                                  onPressed: _login,
-                                  style: ElevatedButton.styleFrom(
-                                    backgroundColor: const Color(0xFF0066CC),
-                                    shape: RoundedRectangleBorder(
-                                      borderRadius: BorderRadius.circular(10),
-                                    ),
-                                  ),
-                                  child: const Text(
-                                    'ENTRAR',
-                                    style: TextStyle(
-                                      fontSize: 18,
-                                      fontWeight: FontWeight.bold,
-                                    ),
-                                  ),
-                                ),
-                              ),
-                        
-                        const SizedBox(height: 20),
-                        
-                        // Botón Demo
-                        SizedBox(
-                          width: double.infinity,
-                          height: 50,
-                          child: OutlinedButton(
-                            onPressed: () {
-                              _emailController.text = 'demo@acosenar.coop';
-                              _passwordController.text = 'demo123';
-                              _login();
-                            },
-                            style: OutlinedButton.styleFrom(
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(10),
-                              ),
-                              side: const BorderSide(color: Color(0xFF0066CC)),
-                            ),
-                            child: const Text(
-                              'MODO DEMO',
-                              style: TextStyle(
-                                fontSize: 16,
-                                color: Color(0xFF0066CC),
-                                fontWeight: FontWeight.bold,
-                              ),
+                        TextButton(
+                          onPressed: () {
+                            _emailController.text = 'matematico21@gmail.com';
+                            _passwordController.text = '';
+                          },
+                          child: Text(
+                            'Acceder con mi cuenta',
+                            style: TextStyle(
+                              fontWeight: FontWeight.w300,
+                              color: theme.colorScheme.primary,
                             ),
                           ),
                         ),
@@ -167,26 +192,26 @@ class _LoginScreenState extends State<LoginScreen> {
                     ),
                   ),
                 ),
-                
-                const SizedBox(height: 30),
-                
-                // Info universitaria
-                const Text(
-                  'Proyecto Universitario - Demo ACOSENAR',
-                  style: TextStyle(
-                    fontSize: 12,
-                    color: Colors.white70,
-                  ),
+              ),
+              const SizedBox(height: 24),
+              Text(
+                'Proyecto Universitario · Demo Financiera',
+                textAlign: TextAlign.center,
+                style: theme.textTheme.bodySmall?.copyWith(
+                  fontWeight: FontWeight.w300,
+                  color: theme.colorScheme.onSurface.withOpacity(0.6),
                 ),
-                const Text(
-                  'Versión 1.0 | Solo demostración',
-                  style: TextStyle(
-                    fontSize: 10,
-                    color: Colors.white54,
-                  ),
+              ),
+              const SizedBox(height: 6),
+              Text(
+                'Versión 1.0',
+                textAlign: TextAlign.center,
+                style: theme.textTheme.bodySmall?.copyWith(
+                  fontWeight: FontWeight.w300,
+                  color: theme.colorScheme.onSurface.withOpacity(0.45),
                 ),
-              ],
-            ),
+              ),
+            ],
           ),
         ),
       ),
@@ -194,15 +219,65 @@ class _LoginScreenState extends State<LoginScreen> {
   }
 
   void _login() async {
+    if (_emailController.text.trim().isEmpty || _passwordController.text.trim().isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Por favor completa todos los campos'),
+          backgroundColor: Colors.red,
+        ),
+      );
+      return;
+    }
+
     setState(() => _isLoading = true);
     
-    // Simular carga
-    await Future.delayed(const Duration(seconds: 1));
+    try {
+      // Conectar al servidor real
+      final response = await http.post(
+        Uri.parse('http://localhost:3000/api/login'),
+        headers: {'Content-Type': 'application/json'},
+        body: json.encode({
+          'email': _emailController.text.trim(),
+          'password': _passwordController.text.trim(),
+        }),
+      );
+      
+      if (response.statusCode == 200) {
+        final result = json.decode(response.body);
+        
+        if (result['success']) {
+          Navigator.pushReplacement(
+            context,
+            MaterialPageRoute(builder: (context) => const HomeScreen()),
+          );
+        } else {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(result['message'] ?? 'Error de login'),
+              backgroundColor: Colors.red,
+            ),
+          );
+        }
+      } else {
+        throw Exception('Error del servidor');
+      }
+    } catch (e) {
+      // Si hay error, validar localmente
+      if (_emailController.text == 'admin@ejemplo.com' && _passwordController.text == '1234') {
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(builder: (context) => const HomeScreen()),
+        );
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error de conexión: ${e.toString()}'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
     
-    // Navegar al home
-    Navigator.pushReplacement(
-      context,
-      MaterialPageRoute(builder: (context) => const HomeScreen()),
-    );
+    setState(() => _isLoading = false);
   }
 }

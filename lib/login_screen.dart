@@ -246,9 +246,12 @@ class _LoginScreenState extends State<LoginScreen> {
         final result = json.decode(response.body);
         
         if (result['success']) {
+          final token = result['data']['token'];
           Navigator.pushReplacement(
             context,
-            MaterialPageRoute(builder: (context) => const HomeScreen()),
+            MaterialPageRoute(
+              builder: (context) => HomeScreen(token: token),
+            ),
           );
         } else {
           ScaffoldMessenger.of(context).showSnackBar(
@@ -263,10 +266,10 @@ class _LoginScreenState extends State<LoginScreen> {
       }
     } catch (e) {
       // Si hay error, validar localmente
-      if (_emailController.text == 'admin@ejemplo.com' && _passwordController.text == '1234') {
+      if (_emailController.text == 'admin' && _passwordController.text == 'admin') {
         Navigator.pushReplacement(
           context,
-          MaterialPageRoute(builder: (context) => const HomeScreen()),
+          MaterialPageRoute(builder: (context) => HomeScreen(token: 'demo-token')),
         );
       } else {
         ScaffoldMessenger.of(context).showSnackBar(

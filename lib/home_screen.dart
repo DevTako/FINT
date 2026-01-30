@@ -4,7 +4,9 @@ import 'dart:convert';
 import 'main.dart';
 
 class HomeScreen extends StatefulWidget {
-  const HomeScreen({super.key});
+  final String token;
+  
+  const HomeScreen({super.key, required this.token});
 
   @override
   _HomeScreenState createState() => _HomeScreenState();
@@ -34,10 +36,10 @@ class _HomeScreenState extends State<HomeScreen> {
 
   Future<void> _loadUserData() async {
     try {
-      // Conectar al servidor real
+      // Conectar al servidor real con el token real
       final response = await http.get(
         Uri.parse('http://localhost:3000/api/financial-data'),
-        headers: {'Authorization': 'Bearer demo-token'},
+        headers: {'Authorization': 'Bearer ${widget.token}'},
       );
       
       if (response.statusCode == 200) {
@@ -49,12 +51,31 @@ class _HomeScreenState extends State<HomeScreen> {
             _balance = (data['balance'] ?? 0.0).toDouble();
             _income = (data['income'] ?? 0.0).toDouble();
             _expenses = (data['expenses'] ?? 0.0).toDouble();
+            
+            // Procesar transacciones de la base de datos
             recentTransactions = List<Map<String, dynamic>>.from(
-              data['transactions'] ?? []
+              data['transactions']?.map((t) => {
+                'id': t['id'],
+                'description': t['descripcion'],
+                'category': t['categoria'],
+                'amount': t['monto'].toString(),
+                'date': t['fecha_transaccion'],
+                'type': t['tipo'] == 'ingreso' ? 'income' : 'expense',
+                'note': t['nota'] ?? '',
+              }) ?? []
             );
+            
+            // Procesar presupuestos de la base de datos
             budgetCategories = List<Map<String, dynamic>>.from(
-              data['budgets'] ?? []
+              data['budgets']?.map((b) => {
+                'id': b['id'],
+                'category': b['categoria'],
+                'budget': b['monto_limite'],
+                'spent': b['monto_actual'],
+                'percentage': b['porcentaje_usado'],
+              }) ?? []
             );
+            
             _isLoading = false;
           });
         } else {
@@ -64,26 +85,19 @@ class _HomeScreenState extends State<HomeScreen> {
         throw Exception('Error HTTP: ${response.statusCode}');
       }
     } catch (e) {
-      // Si hay error, usar datos de demo
-      setState(() {
-        _balance = 5000.0;
-        _income = 3000.0;
-        _expenses = 2200.0;
-        recentTransactions = [
-          {'id': 1, 'description': 'Salario mensual', 'category': 'Ingresos', 'amount': '3000.00', 'date': '15/11/2024', 'type': 'income'},
-          {'id': 2, 'description': 'Supermercado', 'category': 'Alimentos', 'amount': '500.00', 'date': '14/11/2024', 'type': 'expense'},
-          {'id': 3, 'description': 'Transporte', 'category': 'Transporte', 'amount': '200.00', 'date': '13/11/2024', 'type': 'expense'},
-          {'id': 4, 'description': 'Servicios', 'category': 'Servicios', 'amount': '800.00', 'date': '12/11/2024', 'type': 'expense'},
-          {'id': 5, 'description': 'Vivienda', 'category': 'Vivienda', 'amount': '700.00', 'date': '11/11/2024', 'type': 'expense'},
-        ];
-        budgetCategories = [
-          {'category': 'Alimentos', 'budget': 600.0, 'spent': 500.0},
-          {'category': 'Transporte', 'budget': 250.0, 'spent': 200.0},
-          {'category': 'Vivienda', 'budget': 800.0, 'spent': 700.0},
-          {'category': 'Servicios', 'budget': 900.0, 'spent': 800.0},
-        ];
-        _isLoading = false;
-      });
+      // Si hay error, NO sobreescribir con datos demo (para evitar confusión)
+      // Solo salimos de loading y mostramos el error.
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+        });
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error cargando datos: ${e.toString()}'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
     }
   }
 
@@ -256,6 +270,9 @@ class _HomeScreenState extends State<HomeScreen> {
             ),
           ),
           const SizedBox(height: 16),
+          // Carrusel de transacciones con filtros
+          _buildTransactionsCarousel(),
+          const SizedBox(height: 16),
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
@@ -323,6 +340,217 @@ class _HomeScreenState extends State<HomeScreen> {
         ],
       ),
     );
+  }
+
+  Widget _buildTransactionsCarousel() {
+    final theme = Theme.of(context);
+    
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          'Transacciones del mes',
+          style: theme.textTheme.titleMedium?.copyWith(
+            fontWeight: FontWeight.w500,
+          ),
+        ),
+        const SizedBox(height: 16),
+        Container(
+          height: 280,
+          child: PageView.builder(
+            itemCount: 3,
+            controller: PageController(viewportFraction: 0.9),
+            onPageChanged: (index) {
+              setState(() {});
+            },
+            itemBuilder: (context, pageIndex) {
+              return Container(
+                margin: const EdgeInsets.symmetric(horizontal: 8),
+                child: Card(
+                  elevation: 4,
+                  child: Padding(
+                    padding: const EdgeInsets.all(16),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        // Header del carrusel
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Text(
+                              _getCarouselTitle(pageIndex),
+                              style: theme.textTheme.titleMedium?.copyWith(
+                                fontWeight: FontWeight.w600,
+                                color: _getCarouselColor(pageIndex),
+                              ),
+                            ),
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                              decoration: BoxDecoration(
+                                color: _getCarouselColor(pageIndex).withOpacity(0.1),
+                                borderRadius: BorderRadius.circular(20),
+                              ),
+                              child: Text(
+                                _getCarouselCount(pageIndex),
+                                style: theme.textTheme.bodySmall?.copyWith(
+                                  color: _getCarouselColor(pageIndex),
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 16),
+                        
+                        // Lista de transacciones filtradas
+                        Expanded(
+                          child: ListView.builder(
+                            itemCount: _getFilteredTransactions(pageIndex).length,
+                            itemBuilder: (context, index) {
+                              final transaction = _getFilteredTransactions(pageIndex)[index];
+                              final isIncome = transaction['type'] == 'income';
+                              final accent = isIncome ? Colors.green : Colors.redAccent;
+                              
+                              return Padding(
+                                padding: const EdgeInsets.only(bottom: 12),
+                                child: Container(
+                                  padding: const EdgeInsets.all(12),
+                                  decoration: BoxDecoration(
+                                    color: accent.withOpacity(0.05),
+                                    borderRadius: BorderRadius.circular(12),
+                                    border: Border.all(
+                                      color: accent.withOpacity(0.2),
+                                      width: 1,
+                                    ),
+                                  ),
+                                  child: Row(
+                                    children: [
+                                      CircleAvatar(
+                                        radius: 16,
+                                        backgroundColor: accent.withOpacity(0.16),
+                                        child: Icon(
+                                          isIncome 
+                                              ? Icons.arrow_upward_rounded 
+                                              : Icons.arrow_downward_rounded,
+                                          color: accent,
+                                          size: 18,
+                                        ),
+                                      ),
+                                      const SizedBox(width: 12),
+                                      Expanded(
+                                        child: Column(
+                                          crossAxisAlignment: CrossAxisAlignment.start,
+                                          children: [
+                                            Text(
+                                              transaction['description'],
+                                              style: theme.textTheme.bodyMedium?.copyWith(
+                                                fontWeight: FontWeight.w600,
+                                              ),
+                                            ),
+                                            const SizedBox(height: 2),
+                                            Text(
+                                              '${transaction['category']} • ${transaction['date']}',
+                                              style: theme.textTheme.bodySmall?.copyWith(
+                                                color: theme.colorScheme.onSurface.withOpacity(0.6),
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                      Text(
+                                        '\$${transaction['amount']}',
+                                        style: theme.textTheme.bodyMedium?.copyWith(
+                                          fontWeight: FontWeight.w700,
+                                          color: accent,
+                                          fontSize: 16,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              );
+                            },
+                          ),
+                        ),
+                        
+                        // Indicador de página
+                        const SizedBox(height: 12),
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: List.generate(3, (index) {
+                            return Container(
+                              width: 8,
+                              height: 8,
+                              margin: const EdgeInsets.symmetric(horizontal: 4),
+                              decoration: BoxDecoration(
+                                shape: BoxShape.circle,
+                                color: pageIndex == index
+                                    ? theme.colorScheme.primary
+                                    : theme.colorScheme.onSurface.withOpacity(0.3),
+                              ),
+                            );
+                          }),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              );
+            },
+          ),
+        ),
+      ],
+    );
+  }
+  
+  String _getCarouselTitle(int index) {
+    switch (index) {
+      case 0:
+        return '💰 Ingresos';
+      case 1:
+        return '💸 Egresos';
+      case 2:
+        return '📊 Todas';
+      default:
+        return 'Transacciones';
+    }
+  }
+  
+  Color _getCarouselColor(int index) {
+    switch (index) {
+      case 0:
+        return Colors.green;
+      case 1:
+        return Colors.redAccent;
+      case 2:
+        return Colors.blue;
+      default:
+        return Colors.grey;
+    }
+  }
+  
+  String _getCarouselCount(int index) {
+    final transactions = _getFilteredTransactions(index);
+    final total = transactions.fold<double>(
+      0.0, 
+      (sum, t) => sum + (double.tryParse(t['amount'].toString()) ?? 0.0)
+    );
+    return '${transactions.length} • \$${total.toStringAsFixed(0)}';
+  }
+  
+  List<Map<String, dynamic>> _getFilteredTransactions(int index) {
+    switch (index) {
+      case 0:
+        // Solo ingresos
+        return recentTransactions.where((t) => t['type'] == 'income').toList();
+      case 1:
+        // Solo egresos
+        return recentTransactions.where((t) => t['type'] == 'expense').toList();
+      case 2:
+      default:
+        // Todas las transacciones
+        return recentTransactions;
+    }
   }
 
   Widget _summaryTile({
@@ -653,6 +881,66 @@ class _HomeScreenState extends State<HomeScreen> {
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
                       Text(
+                        'Ingresos del mes',
+                        style: theme.textTheme.bodyMedium?.copyWith(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w300,
+                        ),
+                      ),
+                      Text(
+                        '\$${_income.toStringAsFixed(2)}',
+                        style: theme.textTheme.bodyMedium?.copyWith(
+                          fontWeight: FontWeight.w500,
+                          color: Colors.green,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text(
+                        'Gastos del mes',
+                        style: theme.textTheme.bodyMedium?.copyWith(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w300,
+                        ),
+                      ),
+                      Text(
+                        '\$${_expenses.toStringAsFixed(2)}',
+                        style: theme.textTheme.bodyMedium?.copyWith(
+                          fontWeight: FontWeight.w500,
+                          color: Colors.redAccent,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text(
+                        'Balance del mes',
+                        style: theme.textTheme.bodyMedium?.copyWith(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w300,
+                        ),
+                      ),
+                      Text(
+                        '\$${_balance.toStringAsFixed(2)}',
+                        style: theme.textTheme.bodyMedium?.copyWith(
+                          fontWeight: FontWeight.w600,
+                          color: _balance >= 0 ? theme.colorScheme.primary : Colors.redAccent,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 16),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text(
                         'Categoría',
                         style: theme.textTheme.bodyMedium?.copyWith(
                           fontSize: 13,
@@ -687,40 +975,6 @@ class _HomeScreenState extends State<HomeScreen> {
                         ],
                       ),
                     ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-          const SizedBox(height: 16),
-          Card(
-            child: Padding(
-              padding: const EdgeInsets.all(16),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    'Recomendaciones',
-                    style: theme.textTheme.titleMedium?.copyWith(
-                      fontSize: 15,
-                      fontWeight: FontWeight.w500,
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                  _buildRecommendationCard(
-                    'Reducir gastos en Transporte',
-                    'Has gastado 40% más que el mes pasado en transporte',
-                    Icons.directions_car,
-                  ),
-                  _buildRecommendationCard(
-                    'Aumentar ahorro mensual',
-                    'Puedes ahorrar \$200 más este mes',
-                    Icons.savings,
-                  ),
-                  _buildRecommendationCard(
-                    'Presupuesto de Alimentos alto',
-                    'Considera reducir compras innecesarias',
-                    Icons.fastfood,
                   ),
                 ],
               ),
@@ -855,54 +1109,6 @@ class _HomeScreenState extends State<HomeScreen> {
               ),
             ),
           ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildRecommendationCard(String title, String desc, IconData icon) {
-    final theme = Theme.of(context);
-    return Container(
-      margin: const EdgeInsets.only(bottom: 12),
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: theme.colorScheme.primary.withOpacity(0.08),
-        borderRadius: BorderRadius.circular(16),
-      ),
-      child: Row(
-        children: [
-          Container(
-            padding: const EdgeInsets.all(10),
-            decoration: BoxDecoration(
-              color: theme.colorScheme.primary.withOpacity(0.15),
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: Icon(icon, color: theme.colorScheme.primary, size: 20),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  title,
-                  style: theme.textTheme.bodyMedium?.copyWith(
-                    fontWeight: FontWeight.w500,
-                  ),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  desc,
-                  style: theme.textTheme.bodySmall?.copyWith(
-                    fontWeight: FontWeight.w300,
-                    color: theme.colorScheme.onSurface.withOpacity(0.6),
-                  ),
-                ),
-              ],
-            ),
-          ),
-          Icon(Icons.arrow_forward_rounded,
-              color: theme.colorScheme.primary.withOpacity(0.7)),
         ],
       ),
     );
@@ -1123,39 +1329,129 @@ class _HomeScreenState extends State<HomeScreen> {
                   child: const Text('Cancelar'),
                 ),
                 ElevatedButton(
-                  onPressed: () {
-                    if (descriptionController.text.trim().isEmpty || 
-                        amountController.text.trim().isEmpty ||
-                        (isCustomCategory && customCategoryController.text.trim().isEmpty)) {
+                  onPressed: () async {
+                    // Validar campos
+                    if (descriptionController.text.trim().isEmpty) {
                       ScaffoldMessenger.of(context).showSnackBar(
                         const SnackBar(
-                          content: Text('Por favor completa todos los campos'),
+                          content: Text('Por favor ingresa una descripción'),
                           backgroundColor: Colors.red,
                         ),
                       );
                       return;
                     }
                     
-                    final amount = double.tryParse(amountController.text) ?? 0;
-                    if (amount <= 0) {
+                    if (amountController.text.trim().isEmpty) {
                       ScaffoldMessenger.of(context).showSnackBar(
                         const SnackBar(
-                          content: Text('El monto debe ser mayor a 0'),
+                          content: Text('Por favor ingresa un monto'),
                           backgroundColor: Colors.red,
                         ),
                       );
                       return;
                     }
                     
+                    final amount = double.tryParse(amountController.text);
+                    if (amount == null || amount <= 0) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                          content: Text('Por favor ingresa un monto válido'),
+                          backgroundColor: Colors.red,
+                        ),
+                      );
+                      return;
+                    }
+                    
+                    if (isCustomCategory && customCategoryController.text.trim().isEmpty) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                          content: Text('Por favor ingresa un nombre para la categoría personalizada'),
+                          backgroundColor: Colors.red,
+                        ),
+                      );
+                      return;
+                    }
+                    
+                    // Mostrar indicador de carga
                     Navigator.pop(context);
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(
-                        content: Text(
-                          '${transactionType} "${isCustomCategory ? customCategoryController.text : selectedCategory}" de \$${amount.toStringAsFixed(2)} agregado exitosamente'
+                    showDialog(
+                      context: context,
+                      barrierDismissible: false,
+                      builder: (context) => const AlertDialog(
+                        content: Row(
+                          children: [
+                            CircularProgressIndicator(),
+                            SizedBox(width: 20),
+                            Text('Guardando transacción...'),
+                          ],
                         ),
-                        backgroundColor: transactionType == 'Ingreso' ? Colors.green : Colors.orange,
                       ),
                     );
+                    
+                    try {
+                      // Preparar datos para enviar al backend
+                      final transactionData = {
+                        'descripcion': descriptionController.text.trim(),
+                        'monto': amount.toString(),
+                        'tipo': transactionType.toLowerCase() == 'ingreso' ? 'ingreso' : 'gasto',
+                        'categoria': isCustomCategory ? customCategoryController.text.trim() : selectedCategory,
+                        'fecha_transaccion': DateTime.now().toIso8601String().split('T')[0],
+                        'nota': '', // Campo opcional
+                      };
+                      
+                      // Enviar al backend
+                      final response = await http.post(
+                        Uri.parse('http://localhost:3000/api/transaction'),
+                        headers: {
+                          'Content-Type': 'application/json',
+                          'Authorization': 'Bearer ${widget.token}',
+                        },
+                        body: json.encode(transactionData),
+                      );
+                      
+                      Navigator.pop(context); // Cerrar diálogo de carga
+                      
+                      if (response.statusCode == 200) {
+                        final result = json.decode(response.body);
+                        if (result['success']) {
+                          // Recargar datos para mostrar la nueva transacción
+                          await _loadUserData();
+                          
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(
+                              content: Text(
+                                '✅ ${transactionType} "${isCustomCategory ? customCategoryController.text : selectedCategory}" de \$${amount.toStringAsFixed(2)} guardado exitosamente'
+                              ),
+                              backgroundColor: transactionType == 'Ingreso' ? Colors.green : Colors.orange,
+                              duration: const Duration(seconds: 3),
+                            ),
+                          );
+                        } else {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(
+                              content: Text('❌ Error: ${result['message'] ?? 'Error desconocido'}'),
+                              backgroundColor: Colors.red,
+                            ),
+                          );
+                        }
+                      } else {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(
+                            content: Text('❌ Error del servidor: ${response.statusCode}'),
+                            backgroundColor: Colors.red,
+                          ),
+                        );
+                      }
+                    } catch (e) {
+                      Navigator.pop(context); // Cerrar diálogo de carga
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          content: Text('❌ Error de conexión: ${e.toString()}'),
+                          backgroundColor: Colors.red,
+                          duration: const Duration(seconds: 4),
+                        ),
+                      );
+                    }
                   },
                   style: ElevatedButton.styleFrom(
                     backgroundColor: transactionType == 'Ingreso' ? Colors.green : Colors.red,

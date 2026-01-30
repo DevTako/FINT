@@ -11,7 +11,7 @@ const dbConfig = {
     host: 'localhost',
     user: 'root',
     password: '',
-    database: 'acosenar'
+    database: 'fint_db'
 };
 
 // Conexión a la base de datos
@@ -30,9 +30,9 @@ app.post('/api/login', async (req, res) => {
     try {
         const { email, password } = req.body;
         
-        // Buscar usuario en la tabla login con campos "correo" y "contrasena"
+        // Buscar usuario en la tabla usuarios con campos "correo" y "contrasena"
         const [rows] = await pool.execute(
-            'SELECT id, correo, contrasena FROM login WHERE correo = ? AND contrasena = ?',
+            'SELECT id, nombre, correo FROM usuarios WHERE correo = ? AND contrasena = ?',
             [email, password]
         );
         
@@ -40,9 +40,9 @@ app.post('/api/login', async (req, res) => {
             const user = rows[0];
             const token = Math.random().toString(36).substring(2);
             
-            // Guardar token en sessions
+            // Guardar token en sesiones (expira en 24 horas)
             await pool.execute(
-                'INSERT INTO sessions (user_id, token, expires_at) VALUES (?, ?, DATE_ADD(NOW(), INTERVAL 24 HOUR))',
+                'INSERT INTO sesiones (usuario_id, token, fecha_expiracion) VALUES (?, ?, DATE_ADD(NOW(), INTERVAL 24 HOUR))',
                 [user.id, token]
             );
             
@@ -51,7 +51,7 @@ app.post('/api/login', async (req, res) => {
                 data: { 
                     user: { 
                         id: user.id, 
-                        nombre: user.correo, 
+                        nombre: user.nombre, 
                         email: user.correo 
                     }, 
                     token, 
@@ -72,7 +72,7 @@ app.get('/api/financial-data', async (req, res) => {
         const token = req.headers.authorization?.replace('Bearer ', '');
         
         const [sessions] = await pool.execute(
-            'SELECT user_id FROM sessions WHERE token = ? AND expires_at > NOW()',
+            'SELECT usuario_id FROM sesiones WHERE token = ? AND fecha_expiracion > NOW() AND activa = TRUE',
             [token]
         );
         
@@ -80,34 +80,52 @@ app.get('/api/financial-data', async (req, res) => {
             return res.json({ success: false, message: 'Token inválido' });
         }
         
-        const userId = sessions[0].user_id;
-        
-        // Datos financieros
-        const [financial] = await pool.execute(
-            'SELECT balance, income, expenses FROM financial_data WHERE user_id = ?',
+        const userId = sessions[0].usuario_id;
+
+        // Totales del mes actual (coincide con "Resumen mensual")
+        const [monthlyTotals] = await pool.execute(
+            `SELECT
+                COALESCE(SUM(CASE WHEN tipo = 'ingreso' THEN monto ELSE 0 END), 0) AS total_ingresos,
+                COALESCE(SUM(CASE WHEN tipo = 'gasto' THEN monto ELSE 0 END), 0) AS total_gastos
+             FROM transacciones
+             WHERE usuario_id = ?
+               AND YEAR(fecha_transaccion) = YEAR(CURDATE())
+               AND MONTH(fecha_transaccion) = MONTH(CURDATE())`,
             [userId]
         );
         
-        // Transacciones
+        // Obtener transacciones recientes (consulta directa sin vista)
         const [transactions] = await pool.execute(
-            'SELECT id, description, amount, category, type, DATE_FORMAT(date, "%d/%m/%Y") as date FROM transactions WHERE user_id = ? ORDER BY date DESC LIMIT 10',
+            `SELECT t.id, t.descripcion, t.monto, t.tipo, c.nombre as categoria, cu.nombre as cuenta, 
+                    t.fecha_transaccion, t.nota 
+             FROM transacciones t 
+             JOIN categorias c ON t.categoria_id = c.id 
+             JOIN cuentas cu ON t.cuenta_id = cu.id 
+             WHERE t.usuario_id = ? 
+             ORDER BY t.fecha_transaccion DESC, t.created_at DESC 
+             LIMIT 10`,
             [userId]
         );
         
-        // Presupuestos
+        // Obtener presupuestos (consulta directa sin vista)
         const [budgets] = await pool.execute(
-            'SELECT category, budget, spent FROM budgets WHERE user_id = ?',
+            `SELECT p.id, p.nombre, cat.nombre as categoria, p.monto_limite, p.monto_actual, 
+                    ROUND((p.monto_actual / p.monto_limite) * 100, 2) as porcentaje_usado 
+             FROM presupuestos p 
+             JOIN categorias cat ON p.categoria_id = cat.id 
+             WHERE p.usuario_id = ? AND p.activo = TRUE`,
             [userId]
         );
-        
-        const data = financial[0] || { balance: 0, income: 0, expenses: 0 };
+
+        const totals = monthlyTotals[0] || { total_ingresos: 0, total_gastos: 0 };
+        const balance = parseFloat(totals.total_ingresos) - parseFloat(totals.total_gastos);
         
         res.json({
             success: true,
             data: {
-                balance: parseFloat(data.balance),
-                income: parseFloat(data.income),
-                expenses: parseFloat(data.expenses),
+                balance,
+                income: parseFloat(totals.total_ingresos),
+                expenses: parseFloat(totals.total_gastos),
                 transactions,
                 budgets
             }
@@ -121,10 +139,35 @@ app.get('/api/financial-data', async (req, res) => {
 app.post('/api/transaction', async (req, res) => {
     try {
         const token = req.headers.authorization?.replace('Bearer ', '');
-        const { description, amount, category, type } = req.body;
+        const { descripcion, monto, tipo, categoria, fecha_transaccion, nota } = req.body;
+        
+        // Validar campos requeridos
+        if (!descripcion || !monto || !tipo || !categoria) {
+            return res.json({ 
+                success: false, 
+                message: 'Faltan campos requeridos: descripción, monto, tipo y categoría' 
+            });
+        }
+        
+        // Validar tipo
+        if (tipo !== 'ingreso' && tipo !== 'gasto') {
+            return res.json({ 
+                success: false, 
+                message: 'Tipo debe ser "ingreso" o "gasto"' 
+            });
+        }
+        
+        // Validar monto
+        const montoNum = parseFloat(monto);
+        if (isNaN(montoNum) || montoNum <= 0) {
+            return res.json({ 
+                success: false, 
+                message: 'El monto debe ser un número positivo' 
+            });
+        }
         
         const [sessions] = await pool.execute(
-            'SELECT user_id FROM sessions WHERE token = ? AND expires_at > NOW()',
+            'SELECT usuario_id FROM sesiones WHERE token = ? AND fecha_expiracion > NOW() AND activa = TRUE',
             [token]
         );
         
@@ -132,16 +175,99 @@ app.post('/api/transaction', async (req, res) => {
             return res.json({ success: false, message: 'Token inválido' });
         }
         
-        const userId = sessions[0].user_id;
+        const userId = sessions[0].usuario_id;
         
-        await pool.execute(
-            'INSERT INTO transactions (user_id, description, amount, category, type, date) VALUES (?, ?, ?, ?, ?, CURDATE())',
-            [userId, description, parseFloat(amount), category, type]
+        // Buscar o crear categoría
+        let categoriaId;
+        const [existingCategories] = await pool.execute(
+            'SELECT id FROM categorias WHERE nombre = ? AND (usuario_id IS NULL OR usuario_id = ?)',
+            [categoria, userId]
         );
         
-        res.json({ success: true, message: 'Transacción guardada' });
+        if (existingCategories.length > 0) {
+            categoriaId = existingCategories[0].id;
+        } else {
+            // Crear nueva categoría personalizada para el usuario
+            const [newCategory] = await pool.execute(
+                'INSERT INTO categorias (nombre, tipo, icono, color, descripcion, predeterminada, usuario_id) VALUES (?, ?, ?, ?, ?, ?, ?)',
+                [
+                    categoria, 
+                    tipo, 
+                    'category', 
+                    tipo === 'ingreso' ? '#4CAF50' : '#F44336', 
+                    `Categoría personalizada: ${categoria}`, 
+                    false, 
+                    userId
+                ]
+            );
+            categoriaId = newCategory.insertId;
+        }
+        
+        // Buscar cuenta principal del usuario
+        const [cuentas] = await pool.execute(
+            'SELECT id FROM cuentas WHERE usuario_id = ? AND activa = TRUE LIMIT 1',
+            [userId]
+        );
+        
+        if (cuentas.length === 0) {
+            return res.json({ 
+                success: false, 
+                message: 'No tienes cuentas activas. Agrega una cuenta primero.' 
+            });
+        }
+        
+        const cuentaId = cuentas[0].id;
+        
+        // Preparar fecha y nota (asegurar que no sean undefined)
+        const fechaTransaccion = fecha_transaccion || new Date().toISOString().split('T')[0];
+        const notaTransaccion = (nota && nota.trim() !== '') ? nota.trim() : null;
+        
+        console.log('Datos a insertar:', {
+            descripcion: descripcion.trim(),
+            monto: montoNum,
+            tipo,
+            categoriaId,
+            cuentaId,
+            userId,
+            fechaTransaccion,
+            notaTransaccion
+        });
+        
+        // Insertar transacción directamente
+        const [result] = await pool.execute(
+            `INSERT INTO transacciones 
+             (descripcion, monto, tipo, categoria_id, cuenta_id, usuario_id, fecha_transaccion, nota, created_at) 
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, NOW())`,
+            [
+                descripcion.trim(), 
+                montoNum, 
+                tipo, 
+                categoriaId, 
+                cuentaId, 
+                userId, 
+                fechaTransaccion, 
+                notaTransaccion
+            ]
+        );
+        
+        res.json({ 
+            success: true, 
+            message: 'Transacción guardada correctamente',
+            data: {
+                id: result.insertId,
+                descripcion: descripcion.trim(),
+                monto: montoNum,
+                tipo,
+                categoria,
+                fecha_transaccion: fechaTransaccion
+            }
+        });
     } catch (error) {
-        res.json({ success: false, message: error.message });
+        console.error('Error guardando transacción:', error);
+        res.json({ 
+            success: false, 
+            message: error.message || 'Error al guardar la transacción' 
+        });
     }
 });
 
@@ -155,7 +281,7 @@ const PORT = 3000;
 initDB().then(() => {
     app.listen(PORT, () => {
         console.log(`🚀 Servidor corriendo en http://localhost:${PORT}`);
-        console.log('📊 Base de datos: MySQL acosenar');
+        console.log('📊 Base de datos: MySQL fint_db');
         console.log('🔑 Endpoints:');
         console.log('   POST /api/login - Iniciar sesión');
         console.log('   GET  /api/financial-data - Obtener datos');

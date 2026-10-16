@@ -836,7 +836,7 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
   void _showCurrencyCalculatorDialog() {
     final amountCtrl = TextEditingController(text: '1');
     // Configuración Divisas Venezuela (BCV vs Binance)
-    String foreignCurrency = 'USD'; // 'USD', 'EUR', 'USDT', 'USDC'
+    String foreignCurrency = 'USD'; // 'USD', 'USDT', 'USDC'
     bool isForeignToVes = true; // true: Divisa -> VES, false: VES -> Divisa
 
     showDialog(
@@ -1163,7 +1163,7 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
     );
   }
 
-  // ================= MODAL MONITOR DE TASAS VENEZUELA (BCV Y BINANCE) =================
+  //MODAL MONITOR DE TASAS VENEZUELA (BCV Y BINANCE) 
   void _showVenezuelaRatesDialog() {
     showDialog(
       context: context,

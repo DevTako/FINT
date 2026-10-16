@@ -1,286 +1,204 @@
 import 'package:flutter/material.dart';
-import 'package:http/http.dart' as http;
-import 'dart:convert';
+import 'services/api_service.dart';
 import 'home_screen.dart';
-import 'main.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
 
   @override
-  _LoginScreenState createState() => _LoginScreenState();
+  State<LoginScreen> createState() => _LoginScreenState();
 }
 
 class _LoginScreenState extends State<LoginScreen> {
+  final _nameController = TextEditingController();
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
+
+  bool _isRegister = false;
   bool _isLoading = false;
-  late VoidCallback _themeListener;
 
-  @override
-  void initState() {
-    super.initState();
-    _themeListener = () {
-      if (mounted) setState(() {}); // Rebuild when theme changes
-    };
-    ThemeController.mode.addListener(_themeListener);
-  }
+  void _submit() async {
+    final email = _emailController.text.trim();
+    final password = _passwordController.text.trim();
+    final name = _nameController.text.trim();
 
-  @override
-  void dispose() {
-    ThemeController.mode.removeListener(_themeListener);
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final isDark = theme.brightness == Brightness.dark;
-    return Scaffold(
-      body: SafeArea(
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.all(16),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  const SizedBox(width: 40),
-                  Container(
-                    height: 128,
-                    child: Center(
-                      child: Text(
-                        'FINT',
-                        style: TextStyle(
-                          fontSize: 96,
-                          fontWeight: FontWeight.bold,
-                          color: isDark ? Colors.white : Colors.black,
-                          letterSpacing: 4,
-                        ),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 40),
-                ],
-              ),
-              const SizedBox(height: 16),
-              Center(
-                child: Container(
-                  width: 96,
-                  height: 96,
-                  decoration: BoxDecoration(
-                    color: theme.colorScheme.primary.withOpacity(0.1),
-                    borderRadius: BorderRadius.circular(28),
-                  ),
-                  child: Icon(
-                    Icons.sailing_outlined,
-                    size: 46,
-                    color: theme.colorScheme.primary,
-                  ),
-                ),
-              ),
-              const SizedBox(height: 20),
-              Center(
-                child: Text(
-                  'Gestiona tu presupuesto con calma',
-                  style: theme.textTheme.bodyMedium?.copyWith(
-                    fontSize: 14,
-                    fontWeight: FontWeight.w300,
-                    color: theme.colorScheme.onSurface.withOpacity(0.7),
-                  ),
-                ),
-              ),
-              const SizedBox(height: 24),
-              Card(
-                elevation: 0,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(22),
-                ),
-                child: Container(
-                  decoration: BoxDecoration(
-                    borderRadius: BorderRadius.circular(22),
-                    boxShadow: [
-                      BoxShadow(
-                        color: theme.colorScheme.primary.withOpacity(0.08),
-                        blurRadius: 20,
-                        offset: const Offset(0, 10),
-                      ),
-                    ],
-                  ),
-                  child: Padding(
-                    padding: const EdgeInsets.all(24),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: [
-                        Text(
-                          'Iniciar sesión',
-                          style: theme.textTheme.titleLarge?.copyWith(
-                            fontSize: 22,
-                            fontWeight: FontWeight.w500,
-                          ),
-                        ),
-                        const SizedBox(height: 8),
-                        Text(
-                          'Accede con tu cuenta',
-                          style: theme.textTheme.bodyMedium?.copyWith(
-                            fontWeight: FontWeight.w300,
-                            color: theme.colorScheme.onSurface.withOpacity(0.6),
-                          ),
-                        ),
-                        const SizedBox(height: 24),
-                        TextField(
-                          controller: _emailController,
-                          decoration: const InputDecoration(
-                            labelText: 'Correo',
-                            prefixIcon: Icon(Icons.alternate_email),
-                          ),
-                        ),
-                        const SizedBox(height: 16),
-                        TextField(
-                          controller: _passwordController,
-                          obscureText: true,
-                          decoration: const InputDecoration(
-                            labelText: 'Contraseña',
-                            prefixIcon: Icon(Icons.lock_outline),
-                          ),
-                        ),
-                        const SizedBox(height: 24),
-                        _isLoading
-                            ? const Center(child: CircularProgressIndicator())
-                            : SizedBox(
-                                height: 52,
-                                child: ElevatedButton.icon(
-                                  onPressed: _login,
-                                  style: ElevatedButton.styleFrom(
-                                    shape: RoundedRectangleBorder(
-                                      borderRadius: BorderRadius.circular(14),
-                                    ),
-                                  ),
-                                  icon: const Icon(Icons.arrow_forward_rounded),
-                                  label: const Text('Entrar'),
-                                ),
-                              ),
-                        const SizedBox(height: 12),
-                        TextButton(
-                          onPressed: () {
-                            _emailController.clear();
-                            _passwordController.clear();
-                          },
-                          child: Text(
-                            'Limpiar campos',
-                            style: TextStyle(
-                              fontWeight: FontWeight.w300,
-                              color: theme.colorScheme.primary,
-                            ),
-                          ),
-                        ),
-                        TextButton(
-                          onPressed: () {
-                            _emailController.text = 'matematico21@gmail.com';
-                            _passwordController.text = '';
-                          },
-                          child: Text(
-                            'Acceder con mi cuenta',
-                            style: TextStyle(
-                              fontWeight: FontWeight.w300,
-                              color: theme.colorScheme.primary,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-              ),
-              const SizedBox(height: 24),
-              Text(
-                'Proyecto Universitario · Demo Financiera',
-                textAlign: TextAlign.center,
-                style: theme.textTheme.bodySmall?.copyWith(
-                  fontWeight: FontWeight.w300,
-                  color: theme.colorScheme.onSurface.withOpacity(0.6),
-                ),
-              ),
-              const SizedBox(height: 6),
-              Text(
-                'Versión 1.0',
-                textAlign: TextAlign.center,
-                style: theme.textTheme.bodySmall?.copyWith(
-                  fontWeight: FontWeight.w300,
-                  color: theme.colorScheme.onSurface.withOpacity(0.45),
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  void _login() async {
-    if (_emailController.text.trim().isEmpty || _passwordController.text.trim().isEmpty) {
+    if (email.isEmpty || password.isEmpty || (_isRegister && name.isEmpty)) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text('Por favor completa todos los campos'),
-          backgroundColor: Colors.red,
+          backgroundColor: Colors.redAccent,
         ),
       );
       return;
     }
 
     setState(() => _isLoading = true);
-    
-    try {
-      // Conectar al servidor real
-      final response = await http.post(
-        Uri.parse('http://localhost:3000/api/login'),
-        headers: {'Content-Type': 'application/json'},
-        body: json.encode({
-          'email': _emailController.text.trim(),
-          'password': _passwordController.text.trim(),
-        }),
-      );
-      
-      if (response.statusCode == 200) {
-        final result = json.decode(response.body);
-        
-        if (result['success']) {
-          final token = result['data']['token'];
-          Navigator.pushReplacement(
-            context,
-            MaterialPageRoute(
-              builder: (context) => HomeScreen(token: token),
-            ),
-          );
-        } else {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text(result['message'] ?? 'Error de login'),
-              backgroundColor: Colors.red,
-            ),
-          );
-        }
-      } else {
-        throw Exception('Error del servidor');
-      }
-    } catch (e) {
-      // Si hay error, validar localmente
-      if (_emailController.text == 'admin' && _passwordController.text == 'admin') {
-        Navigator.pushReplacement(
-          context,
-          MaterialPageRoute(builder: (context) => HomeScreen(token: 'demo-token')),
-        );
-      } else {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Error de conexión: ${e.toString()}'),
-            backgroundColor: Colors.red,
-          ),
-        );
-      }
+
+    Map<String, dynamic> result;
+    if (_isRegister) {
+      result = await ApiService.register(name, email, password);
+    } else {
+      result = await ApiService.login(email, password);
     }
-    
+
     setState(() => _isLoading = false);
+
+    if (result['success'] == true) {
+      final token = result['token'] ?? 'demo-token';
+      if (!mounted) return;
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(builder: (context) => HomeScreen(token: token)),
+      );
+    } else {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(result['message'] ?? 'Error de autenticación'),
+          backgroundColor: Colors.redAccent,
+        ),
+      );
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+
+    return Scaffold(
+      body: SafeArea(
+        child: Center(
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 440),
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  // Icono Marca FINT
+                  Center(
+                    child: Container(
+                      padding: const EdgeInsets.all(20),
+                      decoration: BoxDecoration(
+                        color: theme.colorScheme.primary.withOpacity(0.12),
+                        shape: BoxShape.circle,
+                      ),
+                      child: Icon(
+                        Icons.account_balance_wallet_outlined,
+                        size: 64,
+                        color: theme.colorScheme.primary,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+
+                  Text(
+                    'FINT',
+                    textAlign: TextAlign.center,
+                    style: theme.textTheme.displayLarge?.copyWith(
+                      letterSpacing: 4,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+
+                  Text(
+                    _isRegister ? 'Crear una cuenta nueva' : 'Sistema de Gestión Financiera Personal',
+                    textAlign: TextAlign.center,
+                    style: theme.textTheme.bodyMedium?.copyWith(
+                      color: theme.colorScheme.onSurface.withOpacity(0.6),
+                    ),
+                  ),
+                  const SizedBox(height: 32),
+
+                  // Formulario Card
+                  Card(
+                    child: Padding(
+                      padding: const EdgeInsets.all(24),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          if (_isRegister) ...[
+                            TextField(
+                              controller: _nameController,
+                              decoration: const InputDecoration(
+                                labelText: 'Nombre completo',
+                                prefixIcon: Icon(Icons.person_outline),
+                              ),
+                            ),
+                            const SizedBox(height: 16),
+                          ],
+                          TextField(
+                            controller: _emailController,
+                            decoration: const InputDecoration(
+                              labelText: 'Correo electrónico / Usuario',
+                              prefixIcon: Icon(Icons.alternate_email),
+                            ),
+                          ),
+                          const SizedBox(height: 16),
+                          TextField(
+                            controller: _passwordController,
+                            obscureText: true,
+                            decoration: const InputDecoration(
+                              labelText: 'Contraseña',
+                              prefixIcon: Icon(Icons.lock_outline),
+                            ),
+                          ),
+                          const SizedBox(height: 24),
+
+                          ElevatedButton(
+                            onPressed: _isLoading ? null : _submit,
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: theme.colorScheme.primary,
+                              foregroundColor: Colors.white,
+                              minimumSize: const Size(double.infinity, 52),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(16),
+                              ),
+                            ),
+                            child: _isLoading
+                                ? const SizedBox(
+                                    width: 24,
+                                    height: 24,
+                                    child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2),
+                                  )
+                                : Text(
+                                    _isRegister ? 'Registrarse' : 'Iniciar Sesión',
+                                    style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                                  ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+
+                  const SizedBox(height: 16),
+
+                  // Switch entre Login / Registro
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Text(_isRegister ? '¿Ya tienes una cuenta?' : '¿No tienes cuenta?'),
+                      TextButton(
+                        onPressed: () {
+                          setState(() => _isRegister = !_isRegister);
+                        },
+                        child: Text(
+                          _isRegister ? 'Inicia sesión' : 'Regístrate aquí',
+                          style: TextStyle(
+                            color: theme.colorScheme.primary,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
   }
 }

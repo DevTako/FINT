@@ -1,18 +1,8 @@
--- =====================================================
--- BASE DE DATOS COMPLETA PARA FINT (VERSIÓN CORREGIDA)
--- =====================================================
--- Creado: 29/01/2026
--- Versión: 1.1 (Corregido para HeidiSQL)
--- Descripción: Sistema financiero personal con usuarios, transacciones, presupuestos y categorías
-
--- Eliminar bases de datos existentes si es necesario
 DROP DATABASE IF EXISTS fint_db;
 CREATE DATABASE fint_db CHARACTER SET utf8mb4 COLLATE utf8mb4_spanish_ci;
 USE fint_db;
 
--- =====================================================
--- TABLA DE USUARIOS
--- =====================================================
+
 CREATE TABLE usuarios (
     id INT AUTO_INCREMENT PRIMARY KEY,
     nombre VARCHAR(100) NOT NULL,
@@ -26,15 +16,13 @@ CREATE TABLE usuarios (
     INDEX idx_activo (activo)
 );
 
--- =====================================================
--- TABLA DE CATEGORÍAS
--- =====================================================
+
 CREATE TABLE categorias (
     id INT AUTO_INCREMENT PRIMARY KEY,
     nombre VARCHAR(50) NOT NULL,
     tipo ENUM('ingreso', 'gasto') NOT NULL,
     icono VARCHAR(50),
-    color VARCHAR(7), -- Código de color hex
+    color VARCHAR(7), 
     descripcion TEXT,
     usuario_id INT,
     predeterminada BOOLEAN DEFAULT FALSE, -- Categorías del sistema
@@ -45,9 +33,6 @@ CREATE TABLE categorias (
     INDEX idx_predeterminada (predeterminada)
 );
 
--- =====================================================
--- TABLA DE CUENTAS/BANCOS
--- =====================================================
 CREATE TABLE cuentas (
     id INT AUTO_INCREMENT PRIMARY KEY,
     nombre VARCHAR(100) NOT NULL,
@@ -66,9 +51,7 @@ CREATE TABLE cuentas (
     INDEX idx_activa (activa)
 );
 
--- =====================================================
--- TABLA DE TRANSACCIONES
--- =====================================================
+
 CREATE TABLE transacciones (
     id INT AUTO_INCREMENT PRIMARY KEY,
     descripcion VARCHAR(255) NOT NULL,
@@ -97,9 +80,7 @@ CREATE TABLE transacciones (
     INDEX idx_recurrente (recurrente)
 );
 
--- =====================================================
--- TABLA DE PRESUPUESTOS
--- =====================================================
+
 CREATE TABLE presupuestos (
     id INT AUTO_INCREMENT PRIMARY KEY,
     nombre VARCHAR(100) NOT NULL,
@@ -124,9 +105,6 @@ CREATE TABLE presupuestos (
     INDEX idx_fechas (fecha_inicio, fecha_fin)
 );
 
--- =====================================================
--- TABLA DE METAS DE AHORRO
--- =====================================================
 CREATE TABLE metas_ahorro (
     id INT AUTO_INCREMENT PRIMARY KEY,
     nombre VARCHAR(100) NOT NULL,
@@ -151,9 +129,6 @@ CREATE TABLE metas_ahorro (
     INDEX idx_prioridad (prioridad)
 );
 
--- =====================================================
--- TABLA DE SESIONES (para autenticación) - CORREGIDA
--- =====================================================
 CREATE TABLE sesiones (
     id INT AUTO_INCREMENT PRIMARY KEY,
     usuario_id INT NOT NULL,
@@ -171,9 +146,6 @@ CREATE TABLE sesiones (
     INDEX idx_activa (activa)
 );
 
--- =====================================================
--- TABLA DE CONFIGURACIÓN DE USUARIO
--- =====================================================
 CREATE TABLE configuracion_usuario (
     id INT AUTO_INCREMENT PRIMARY KEY,
     usuario_id INT NOT NULL UNIQUE,
@@ -190,18 +162,13 @@ CREATE TABLE configuracion_usuario (
     FOREIGN KEY (usuario_id) REFERENCES usuarios(id) ON DELETE CASCADE
 );
 
--- =====================================================
--- INSERTAR DATOS DE EJEMPLO
--- =====================================================
 
--- Usuario admin
+-- Usuario por defecto (contraseña: admin, hasheada con bcrypt)
 INSERT INTO usuarios (nombre, correo, contrasena, telefono) VALUES 
-('Administrador', 'admin', 'admin', '5555555555');
+('Administrador', 'admin', '$2b$10$UbZOwEuGgNEs0UqqkezfGuhxXSdTGKrfpaCJljUGIJOFQuaItbAx6', '5555555555');
 
--- Configuración del usuario admin
 INSERT INTO configuracion_usuario (usuario_id) VALUES (1);
 
--- Categorías predeterminadas del sistema
 INSERT INTO categorias (nombre, tipo, icono, color, descripcion, predeterminada) VALUES
 ('Salario', 'ingreso', 'work', '#4CAF50', 'Ingresos por trabajo', TRUE),
 ('Freelance', 'ingreso', 'laptop', '#2196F3', 'Trabajos independientes', TRUE),
@@ -251,11 +218,6 @@ INSERT INTO metas_ahorro (nombre, descripcion, monto_objetivo, cuenta_destino_id
 ('Vacaciones 2026', 'Ahorro para vacaciones familiares', 30000.00, 4, 1, '2026-07-01', 'media'),
 ('Nuevo laptop', 'Comprar laptop para trabajo', 25000.00, 4, 1, '2026-06-30', 'baja');
 
--- =====================================================
--- VISTAS ÚTILES
--- =====================================================
-
--- Vista de resumen financiero del usuario
 CREATE VIEW resumen_financiero AS
 SELECT 
     u.id as usuario_id,
@@ -285,7 +247,6 @@ LEFT JOIN (
     GROUP BY usuario_id
 ) cuentas ON u.id = cuentas.usuario_id;
 
--- Vista de últimas transacciones
 CREATE VIEW ultimas_transacciones AS
 SELECT 
     t.id,
@@ -303,7 +264,6 @@ JOIN cuentas cu ON t.cuenta_id = cu.id
 JOIN usuarios u ON t.usuario_id = u.id
 ORDER BY t.fecha_transaccion DESC, t.created_at DESC;
 
--- Vista de progreso de presupuestos
 CREATE VIEW progreso_presupuestos AS
 SELECT 
     p.id,
@@ -320,13 +280,9 @@ FROM presupuestos p
 JOIN categorias cat ON p.categoria_id = cat.id
 JOIN usuarios u ON p.usuario_id = u.id;
 
--- =====================================================
--- PROCEDIMIENTOS ALMACENADOS ÚTILES
--- =====================================================
 
 DELIMITER //
 
--- Procedimiento para actualizar saldo de cuenta
 CREATE PROCEDURE actualizar_saldo_cuenta(
     IN p_cuenta_id INT,
     IN p_monto DECIMAL(15,2),
@@ -344,7 +300,6 @@ BEGIN
     END IF;
 END //
 
--- Procedimiento para registrar transacción completa
 CREATE PROCEDURE registrar_transaccion(
     IN p_descripcion VARCHAR(255),
     IN p_monto DECIMAL(15,2),
@@ -358,16 +313,13 @@ CREATE PROCEDURE registrar_transaccion(
 BEGIN
     DECLARE v_id INT;
     
-    -- Insertar transacción
     INSERT INTO transacciones (descripcion, monto, tipo, categoria_id, cuenta_id, usuario_id, fecha_transaccion, nota)
     VALUES (p_descripcion, p_monto, p_tipo, p_categoria_id, p_cuenta_id, p_usuario_id, p_fecha, p_nota);
     
     SET v_id = LAST_INSERT_ID();
     
-    -- Actualizar saldo de cuenta
     CALL actualizar_saldo_cuenta(p_cuenta_id, p_monto, p_tipo);
     
-    -- Actualizar presupuesto si existe
     UPDATE presupuestos 
     SET monto_actual = monto_actual + p_monto 
     WHERE categoria_id = p_categoria_id 
@@ -378,7 +330,6 @@ BEGIN
     SELECT v_id as transaccion_id;
 END //
 
--- Procedimiento para obtener resumen mensual
 CREATE PROCEDURE resumen_mensual(
     IN p_usuario_id INT,
     IN p_mes INT,
@@ -399,13 +350,9 @@ END //
 
 DELIMITER ;
 
--- =====================================================
--- DISPARADORES (TRIGGERS)
--- =====================================================
 
 DELIMITER //
 
--- Trigger para actualizar presupuesto automáticamente
 CREATE TRIGGER actualizar_presupuesto_despues_transaccion
 AFTER INSERT ON transacciones
 FOR EACH ROW
@@ -420,13 +367,11 @@ BEGIN
     END IF;
 END //
 
--- Trigger para actualizar meta de ahorro
 CREATE TRIGGER actualizar_meta_ahorro_despues_transaccion
 AFTER INSERT ON transacciones
 FOR EACH ROW
 BEGIN
     IF NEW.tipo = 'gasto' THEN
-        -- Si es una transacción de ahorro, actualizar la meta correspondiente
         UPDATE metas_ahorro 
         SET monto_actual = monto_actual + NEW.monto 
         WHERE cuenta_destino_id = NEW.cuenta_id 
@@ -438,11 +383,6 @@ END //
 
 DELIMITER ;
 
--- =====================================================
--- FINALIZACIÓN
--- =====================================================
-
--- Mostrar mensaje de éxito
 SELECT 
     'Base de datos FINT creada exitosamente (Versión corregida)' as mensaje,
     'Usuario: admin / Contraseña: admin' as credenciales,

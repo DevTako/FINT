@@ -1,13 +1,11 @@
 import 'dart:convert';
 import 'package:http/http.dart' as http;
-import 'dart:io';
 
 class ApiService {
-  // Configuración del servidor remoto
-  static const String baseUrl = 'http://127.0.0.1:3306/api'; // Servidor local
-  
-  // Headers comunes para todas las peticiones
-  static Map<String, String> _getHeaders({String? token}) {
+  // URL base del backend Node.js. Usa 10.0.2.2 para emulador Android o IP/localhost
+  static String baseUrl = 'http://localhost:3000/api';
+
+  static Map<String, String> _headers({String? token}) {
     return {
       'Content-Type': 'application/json',
       'Accept': 'application/json',
@@ -15,275 +13,224 @@ class ApiService {
     };
   }
 
-  // Manejo de excepciones HTTP
-  static String _handleHttpError(int statusCode, String responseBody) {
-    switch (statusCode) {
-      case 400:
-        return 'Solicitud incorrecta. Verifica los datos enviados.';
-      case 401:
-        return 'No autorizado. Inicia sesión nuevamente.';
-      case 403:
-        return 'Acceso denegado. No tienes permisos para esta acción.';
-      case 404:
-        return 'Recurso no encontrado. Verifica la URL del servidor.';
-      case 500:
-        return 'Error del servidor. Intenta más tarde.';
-      case 502:
-        return 'Servidor no disponible. Intenta más tarde.';
-      case 503:
-        return 'Servicio temporalmente no disponible.';
-      default:
-        return 'Error desconocido ($statusCode): $responseBody';
-    }
-  }
-
-  // LOGIN - Autenticación de usuario
+  // LOGIN
   static Future<Map<String, dynamic>> login(String email, String password) async {
     try {
       final response = await http.post(
         Uri.parse('$baseUrl/login'),
-        headers: _getHeaders(),
-        body: jsonEncode({
-          'email': email,
-          'password': _hashPassword(password), // Hash simple para seguridad
-        }),
-      ).timeout(Duration(seconds: 10));
+        headers: _headers(),
+        body: jsonEncode({'email': email, 'password': password}),
+      ).timeout(const Duration(seconds: 8));
 
-      if (response.statusCode == 200) {
-        final data = jsonDecode(response.body);
+      final data = jsonDecode(response.body);
+      if (response.statusCode == 200 && data['success'] == true) {
         return {
           'success': true,
-          'userId': data['user_id'],
-          'token': data['token'],
-          'message': 'Inicio de sesión exitoso'
-        };
-      } else {
-        return {
-          'success': false,
-          'message': _handleHttpError(response.statusCode, response.body)
+          'token': data['data']['token'],
+          'user': data['data']['user'],
+          'user_id': data['data']['user_id'],
         };
       }
-    } on SocketException {
-      return {'success': false, 'message': 'Sin conexión a internet'};
-    } on HttpException {
-      return {'success': false, 'message': 'Error de conexión HTTP'};
+      return {'success': false, 'message': data['message'] ?? 'Error de autenticación'};
     } catch (e) {
-      return {'success': false, 'message': 'Error inesperado: ${e.toString()}'};
+      return {'success': false, 'message': 'Error de conexión con el servidor ($baseUrl)'};
     }
   }
 
-  // REGISTRO - Crear nuevo usuario
+  // REGISTRO
   static Future<Map<String, dynamic>> register(String name, String email, String password) async {
     try {
       final response = await http.post(
         Uri.parse('$baseUrl/register'),
-        headers: _getHeaders(),
-        body: jsonEncode({
-          'name': name,
-          'email': email,
-          'password': _hashPassword(password),
-        }),
-      ).timeout(Duration(seconds: 10));
+        headers: _headers(),
+        body: jsonEncode({'name': name, 'email': email, 'password': password}),
+      ).timeout(const Duration(seconds: 8));
 
-      if (response.statusCode == 201) {
-        final data = jsonDecode(response.body);
+      final data = jsonDecode(response.body);
+      if (response.statusCode == 201 && data['success'] == true) {
         return {
           'success': true,
-          'userId': data['user_id'],
-          'token': data['token'],
-          'message': 'Usuario creado exitosamente'
-        };
-      } else {
-        return {
-          'success': false,
-          'message': _handleHttpError(response.statusCode, response.body)
+          'token': data['data']['token'],
+          'user': data['data']['user'],
         };
       }
-    } on SocketException {
-      return {'success': false, 'message': 'Sin conexión a internet'};
-    } on HttpException {
-      return {'success': false, 'message': 'Error de conexión HTTP'};
+      return {'success': false, 'message': data['message'] ?? 'Error al registrar usuario'};
     } catch (e) {
-      return {'success': false, 'message': 'Error inesperado: ${e.toString()}'};
-    }
-  }
-
-  // GUARDAR DATOS FINANCIEROS
-  static Future<Map<String, dynamic>> saveFinancialData({
-    required String userId,
-    required String token,
-    required double balance,
-    required double income,
-    required double expenses,
-    required List<Map<String, dynamic>> transactions,
-    required List<Map<String, dynamic>> budgets,
-  }) async {
-    try {
-      final response = await http.post(
-        Uri.parse('$baseUrl/financial-data'),
-        headers: _getHeaders(token: token),
-        body: jsonEncode({
-          'user_id': userId,
-          'balance': balance,
-          'income': income,
-          'expenses': expenses,
-          'transactions': transactions,
-          'budgets': budgets,
-          'updated_at': DateTime.now().toIso8601String(),
-        }),
-      ).timeout(Duration(seconds: 10));
-
-      if (response.statusCode == 200) {
-        return {
-          'success': true,
-          'message': 'Datos financieros guardados exitosamente'
-        };
-      } else {
-        return {
-          'success': false,
-          'message': _handleHttpError(response.statusCode, response.body)
-        };
-      }
-    } on SocketException {
-      return {'success': false, 'message': 'Sin conexión a internet'};
-    } on HttpException {
-      return {'success': false, 'message': 'Error de conexión HTTP'};
-    } catch (e) {
-      return {'success': false, 'message': 'Error inesperado: ${e.toString()}'};
+      return {'success': false, 'message': 'Error de conexión: ${e.toString()}'};
     }
   }
 
   // OBTENER DATOS FINANCIEROS
-  static Future<Map<String, dynamic>> getFinancialData(String userId, String token) async {
+  static Future<Map<String, dynamic>> getFinancialData(String token) async {
     try {
       final response = await http.get(
-        Uri.parse('$baseUrl/financial-data/$userId'),
-        headers: _getHeaders(token: token),
-      ).timeout(Duration(seconds: 10));
+        Uri.parse('$baseUrl/financial-data'),
+        headers: _headers(token: token),
+      ).timeout(const Duration(seconds: 8));
 
-      if (response.statusCode == 200) {
-        final data = jsonDecode(response.body);
-        return {
-          'success': true,
-          'data': data,
-          'message': 'Datos obtenidos exitosamente'
-        };
-      } else {
-        return {
-          'success': false,
-          'message': _handleHttpError(response.statusCode, response.body)
-        };
+      final data = jsonDecode(response.body);
+      if (response.statusCode == 200 && data['success'] == true) {
+        return {'success': true, 'data': data['data']};
       }
-    } on SocketException {
-      return {'success': false, 'message': 'Sin conexión a internet'};
-    } on HttpException {
-      return {'success': false, 'message': 'Error de conexión HTTP'};
+      return {'success': false, 'message': data['message'] ?? 'Error al cargar datos'};
     } catch (e) {
-      return {'success': false, 'message': 'Error inesperado: ${e.toString()}'};
+      return {'success': false, 'message': 'Error de conexión: ${e.toString()}'};
     }
   }
 
-  // GUARDAR TRANSACCIÓN INDIVIDUAL
-  static Future<Map<String, dynamic>> saveTransaction({
-    required String userId,
+  // NUEVA TRANSACCIÓN
+  static Future<Map<String, dynamic>> addTransaction({
     required String token,
     required String description,
     required double amount,
+    required String type,
     required String category,
-    required String type, // 'income' o 'expense'
+    String? note,
   }) async {
     try {
       final response = await http.post(
-        Uri.parse('$baseUrl/transactions'),
-        headers: _getHeaders(token: token),
+        Uri.parse('$baseUrl/transaction'),
+        headers: _headers(token: token),
         body: jsonEncode({
-          'user_id': userId,
-          'description': description,
-          'amount': amount,
-          'category': category,
-          'type': type,
-          'date': DateTime.now().toIso8601String(),
+          'descripcion': description,
+          'monto': amount,
+          'tipo': type,
+          'categoria': category,
+          'nota': note ?? '',
         }),
-      ).timeout(Duration(seconds: 10));
+      ).timeout(const Duration(seconds: 8));
 
-      if (response.statusCode == 201) {
-        return {
-          'success': true,
-          'message': 'Transacción guardada exitosamente'
-        };
-      } else {
-        return {
-          'success': false,
-          'message': _handleHttpError(response.statusCode, response.body)
-        };
-      }
-    } on SocketException {
-      return {'success': false, 'message': 'Sin conexión a internet'};
-    } on HttpException {
-      return {'success': false, 'message': 'Error de conexión HTTP'};
+      final data = jsonDecode(response.body);
+      return {'success': response.statusCode == 200 && data['success'] == true, 'message': data['message']};
     } catch (e) {
-      return {'success': false, 'message': 'Error inesperado: ${e.toString()}'};
+      return {'success': false, 'message': 'Error de conexión'};
     }
   }
 
-  // ACTUALIZAR PRESUPUESTO
-  static Future<Map<String, dynamic>> updateBudget({
-    required String userId,
+  // CREAR PRESUPUESTO
+  static Future<Map<String, dynamic>> createBudget({
     required String token,
     required String category,
-    required double budget,
-    required double spent,
+    required double limitAmount,
+    required String period,
+  }) async {
+    try {
+      final response = await http.post(
+        Uri.parse('$baseUrl/budget'),
+        headers: _headers(token: token),
+        body: jsonEncode({
+          'nombre': 'Presupuesto $category',
+          'categoria': category,
+          'monto_limite': limitAmount,
+          'periodo': period,
+        }),
+      ).timeout(const Duration(seconds: 8));
+
+      final data = jsonDecode(response.body);
+      return {'success': response.statusCode == 200 && data['success'] == true, 'message': data['message']};
+    } catch (e) {
+      return {'success': false, 'message': 'Error al guardar presupuesto'};
+    }
+  }
+
+  // TASAS DE CAMBIO EN VIVO (DIVISAS)
+  static Future<Map<String, dynamic>> getExchangeRates(String baseCurrency) async {
+    try {
+      final response = await http.get(
+        Uri.parse('$baseUrl/currency/rates?base=$baseCurrency'),
+        headers: _headers(),
+      ).timeout(const Duration(seconds: 8));
+
+      final data = jsonDecode(response.body);
+      if (data['success'] == true) {
+        return {'success': true, 'rates': data['rates'], 'source': data['source']};
+      }
+      return {'success': false, 'message': 'Error al cargar divisas'};
+    } catch (e) {
+      return {'success': false, 'message': 'Sin conexión a servicio de divisas'};
+    }
+  }
+
+  // MERCADO VENEZUELA: BCV (Dólar Oficial) + Binance P2P (USDT y USDC)
+  static Future<Map<String, dynamic>> getVenezuelaRates() async {
+    try {
+      final response = await http.get(
+        Uri.parse('$baseUrl/currency/venezuela'),
+        headers: _headers(),
+      ).timeout(const Duration(seconds: 10));
+
+      final data = jsonDecode(response.body);
+      if (data['success'] == true) {
+        return {'success': true, 'data': data};
+      }
+      return {'success': false, 'message': 'Error al obtener tasas de Venezuela'};
+    } catch (e) {
+      return {'success': false, 'message': 'Sin conexión con el servicio cambiario'};
+    }
+  }
+
+  // CONVERSOR DE DIVISAS
+  static Future<Map<String, dynamic>> convertCurrency({
+    required double amount,
+    required String from,
+    required String to,
+  }) async {
+    try {
+      final response = await http.post(
+        Uri.parse('$baseUrl/currency/convert'),
+        headers: _headers(),
+        body: jsonEncode({'amount': amount, 'from': from, 'to': to}),
+      ).timeout(const Duration(seconds: 8));
+
+      final data = jsonDecode(response.body);
+      if (response.statusCode == 200 && data['success'] == true) {
+        return {'success': true, 'data': data['data']};
+      }
+      return {'success': false, 'message': data['message'] ?? 'Error al convertir divisa'};
+    } catch (e) {
+      return {'success': false, 'message': 'Error de conexión: ${e.toString()}'};
+    }
+  }
+
+  // ACTUALIZAR PERFIL
+  static Future<Map<String, dynamic>> updateProfile({
+    required String token,
+    required String name,
+    required String email,
+    required String phone,
+    required String housingZone,
   }) async {
     try {
       final response = await http.put(
-        Uri.parse('$baseUrl/budgets'),
-        headers: _getHeaders(token: token),
+        Uri.parse('$baseUrl/profile'),
+        headers: _headers(token: token),
         body: jsonEncode({
-          'user_id': userId,
-          'category': category,
-          'budget': budget,
-          'spent': spent,
-          'updated_at': DateTime.now().toIso8601String(),
+          'name': name,
+          'email': email,
+          'phone': phone,
+          'housingZone': housingZone,
         }),
-      ).timeout(Duration(seconds: 10));
+      ).timeout(const Duration(seconds: 8));
 
-      if (response.statusCode == 200) {
-        return {
-          'success': true,
-          'message': 'Presupuesto actualizado exitosamente'
-        };
-      } else {
-        return {
-          'success': false,
-          'message': _handleHttpError(response.statusCode, response.body)
-        };
-      }
-    } on SocketException {
-      return {'success': false, 'message': 'Sin conexión a internet'};
-    } on HttpException {
-      return {'success': false, 'message': 'Error de conexión HTTP'};
+      final data = jsonDecode(response.body);
+      return {'success': response.statusCode == 200 && data['success'] == true, 'message': data['message']};
     } catch (e) {
-      return {'success': false, 'message': 'Error inesperado: ${e.toString()}'};
+      return {'success': false, 'message': 'Error al actualizar perfil'};
     }
   }
 
-  // Hash simple de contraseña (solo para demostración)
-  static String _hashPassword(String password) {
-    // NOTA: En producción usa bcrypt o argon2
-    return password.split('').reversed.join(); // Simple reversión para demo
-  }
-
-  // Verificar conexión con el servidor
-  static Future<bool> checkConnection() async {
+  // ELIMINAR CUENTA
+  static Future<Map<String, dynamic>> deleteAccount(String token) async {
     try {
-      final response = await http.get(
-        Uri.parse('$baseUrl/health'),
-        headers: _getHeaders(),
-      ).timeout(Duration(seconds: 5));
-      
-      return response.statusCode == 200;
+      final response = await http.delete(
+        Uri.parse('$baseUrl/profile'),
+        headers: _headers(token: token),
+      ).timeout(const Duration(seconds: 8));
+
+      final data = jsonDecode(response.body);
+      return {'success': response.statusCode == 200 && data['success'] == true, 'message': data['message']};
     } catch (e) {
-      return false;
+      return {'success': false, 'message': 'Error al eliminar cuenta'};
     }
   }
 }

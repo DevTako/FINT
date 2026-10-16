@@ -44,6 +44,16 @@ app.*.map.json
 /android/app/profile
 /android/app/release
 
-# Evita subir claves
+# Node.js
+**/node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Evita subir credenciales o archivos de entorno locales
 .env
+.env.*
+!.env.example
 *.key
+*.pem
+test_gemini.json
